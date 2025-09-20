@@ -1,6 +1,7 @@
 import os
 import random
 import torch
+from PIL import Image
 import torch.nn.functional as F
 from transformers import AutoTokenizer, AutoModel, AutoImageProcessor
 class EmbedVision:

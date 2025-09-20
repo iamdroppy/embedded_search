@@ -10,6 +10,7 @@ from qdrant_client import QdrantClient
 from qdrant_client.http import models
 from embeds import EmbedVision, EmbedText
 from vector_db import VectorDB
+from loguru import logger
 
 def embed_image(file_path: str, vision_embedder: EmbedVision) -> torch.Tensor:
     """
@@ -23,13 +24,13 @@ def embed_image(file_path: str, vision_embedder: EmbedVision) -> torch.Tensor:
         torch.Tensor: Image embedding tensor.
     """
     try:
-        echo(f"[blue]Embedding file:[/blue] {escape(file_path)}")
+        logger.debug(f"Starting: Embedding file: {escape(file_path)}")
         image = Image.open(file_path)
         image_embedding = vision_embedder.embed(image)
-        echo(f"Embedded [red]image[/red] to vector of size {image_embedding.size()}.")
+        logger.debug(f"Image embedded to a size of {image_embedding.size()}.")
         return image_embedding
     except Exception as e:
-        echo(f"[red]Error embedding file {file_path}: {e}[/red]")
+        logger.error(f"Error embedding file {file_path}: {e}")
         return torch.empty(0)
 
 def save_embeddings(
@@ -55,19 +56,19 @@ def save_embeddings(
 
     for filename in os.listdir(image_dir):
         if not filename.lower().endswith(allowed_extensions):
-            echo(f"[yellow]Skipping non-image file:[/yellow] [yellow bold]{escape(filename)}[/yellow bold]")
+            logger.warning(f"Skipping non-image file: {escape(filename)}")
             continue
         file_path = os.path.join(image_dir, filename)
         image_embedding = embed_image(file_path, vision_embedder)
         full_file_path = os.path.abspath(file_path)
-        echo(f"[blue]Storing embedding for file:[/blue] [blue bold]{escape(full_file_path)}[/blue bold]")
+        logger.info(f"Storing embedding for file: {escape(full_file_path)}...")
         vector_db.insert_vector(
             collection_name=collection_name,
             vector=image_embedding,
             payload={"filename": full_file_path}
         )
 
-def search_embedding(
+def search_embedding_ui(
     collection_name: str = "image_text_embeddings",
     vector_host: str = "localhost",
     vector_port: int = 6333
@@ -98,18 +99,18 @@ def search_embedding(
         search_vector = text_embedder.embed(query)
         results = vector_db.search_vector(collection_name=collection_name, vector=search_vector, top_k=top_k)
         if not results:
-            echo(f"[red]No results found for query:[/red] {escape(query)}")
+            logger.warning(f"No results found for query: {escape(query)}")
             return [None] * top_k
-        echo(f"[green]Top {top_k} results for query:[/green] {escape(query)}")
+        logger.info(f"Top {top_k} results for query: {escape(query)}")
         images = []
         for result in results:
-            echo(f"[pink]Point ID:[/pink] {result.id}, [pink]Score:[/pink] {result.score}, [pink]Payload:[/pink] {result.payload}")
+            logger.info(f"Point ID: {result.id}, Score: {result.score}, Payload: {result.payload}")
             path = result.payload.get("filename")
             try:
                 img = Image.open(path)
                 images.append(img)
             except Exception as e:
-                echo(f"[red]Error loading image {path}: {e}[/red]")
+                logger.error(f"Error loading image {path}: {e}")
                 images.append(None)
         while len(images) < top_k:
             images.append(None)
@@ -151,7 +152,7 @@ def main():
     if args.save:
         save_embeddings(args.collection, args.vector_host, args.vector_port, args.image_dir)
     elif args.search:
-        search_embedding(args.collection, args.vector_host, args.vector_port)
+        search_embedding_ui(args.collection, args.vector_host, args.vector_port)
 
 if __name__ == "__main__":
     main()
