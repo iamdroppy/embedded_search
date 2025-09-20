@@ -9,6 +9,7 @@ from rich.markup import escape
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
 from embeds import EmbedVision, EmbedText
+from loguru import logger
 
 class VectorDB:
     """
@@ -39,7 +40,7 @@ class VectorDB:
             collection = self.client.get_collection(name)
             return collection is not None
         except Exception as e:
-            echo(f"[red]Error checking collection {escape(name)}: {e}[/red]")
+            logger.warning(f"No collection found with name {escape(name)}")
             return False
 
     def create_collection(self, name: str, vector_size: int):
@@ -54,13 +55,14 @@ class VectorDB:
             Collection object.
         """
         if self.has_collection(name):
-            echo(f"[yellow]Collection already exists:[/yellow] {escape(name)}")
+            logger.debug(f"Collection already exists: {escape(name)}")
             return self.client.get_collection(name)
+        logger.info(f"Creating collection: {escape(name)} with vector size {vector_size}")
         collection = self.client.recreate_collection(
             collection_name=name,
             vectors_config=models.VectorParams(size=vector_size, distance=models.Distance.COSINE)
         )
-        echo(f"[green]Created collection:[/green] {escape(name)}")
+        logger.info(f"Created collection: {escape(name)}")
         return collection
 
     def insert_vector(self, collection_name: str, vector: torch.Tensor, payload: dict = None):
@@ -73,7 +75,7 @@ class VectorDB:
             payload (dict, optional): Additional metadata to store.
         """
         if vector.numel() == 0:
-            echo(f"[red]Empty vector, skipping insertion into collection {escape(collection_name)}[/red]")
+            logger.warning(f"Empty vector, skipping insertion into collection {escape(collection_name)}")
             return
         vector_list = vector.squeeze(0).tolist()
         point_id = random.randint(1, 1_000_000_000)
@@ -83,7 +85,7 @@ class VectorDB:
                 models.PointStruct(id=point_id, vector=vector_list, payload=payload or {})
             ]
         )
-        echo(f"[green]Inserted vector into collection:[/green] {escape(collection_name)} with point ID {point_id}")
+        logger.info(f"Inserted vector into collection: {escape(collection_name)} with point ID {point_id}")
 
     def search_vector(self, collection_name: str, vector: torch.Tensor, top_k: int = 5):
         """
@@ -98,7 +100,7 @@ class VectorDB:
             list: Search results.
         """
         if vector.numel() == 0:
-            echo(f"[red]Empty vector, cannot perform search in collection {escape(collection_name)}[/red]")
+            logger.warning(f"Empty vector, cannot perform search in collection {escape(collection_name)}")
             return []
         vector_list = vector.squeeze(0).tolist()
         results = self.client.search(
@@ -106,5 +108,5 @@ class VectorDB:
             query_vector=vector_list,
             limit=top_k
         )
-        echo(f"[blue]Search results in collection:[/blue] {escape(collection_name)}")
+        logger.info(f"Search results in collection: {escape(collection_name)}")
         return results
